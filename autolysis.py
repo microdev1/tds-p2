@@ -48,7 +48,7 @@ def load_dataset(file_path):
         try:
             return pd.read_csv(file_path, encoding=encoding)
         except UnicodeDecodeError:
-            continue
+            pass
 
     print("Error: Unable to decode the file with common encodings.")
     sys.exit(1)
@@ -88,27 +88,25 @@ def generate_visualizations(df):
     and distribution plots for numeric columns.
     """
     numeric_columns = df.select_dtypes(include=["number"]).columns
-    generated_images = 0  # Counter for generated images
+
+    if not numeric_columns:
+        return
 
     # Set dimensions for figures
     fig_width = 5.12  # Inches for 512px at dpi=100
     fig_height = 5.12
-    target_dpi = 100  # Dots per inch
+    fig_dpi = 100  # Dots per inch
 
-    # Generate correlation heatmap if applicable
-    if len(numeric_columns) > 1 and generated_images < 5:
-        corr = df[numeric_columns].corr()
-        plt.figure(figsize=(fig_width, fig_height))
-        sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f")
-        plt.title("Correlation Heatmap")
-        plt.savefig("correlation_heatmap.png", dpi=target_dpi)
-        plt.close()
-        generated_images += 1
+    # Generate correlation heatmap
+    corr = df[numeric_columns].corr()
+    plt.figure(figsize=(fig_width, fig_height))
+    sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f")
+    plt.title("Correlation Heatmap")
+    plt.savefig("correlation_heatmap.png", dpi=fig_dpi)
+    plt.close()
 
     # Generate distribution plots for numeric columns
-    for column in numeric_columns:
-        if generated_images >= 5:
-            break
+    for column in numeric_columns[:3]:
         # Replace whitespaces with underscores in the column name
         column_name = column.replace(" ", "_")
 
@@ -118,9 +116,8 @@ def generate_visualizations(df):
         plt.xlabel(column)
         plt.ylabel("Frequency")
         plt.legend([column], loc="upper right")
-        plt.savefig(f"{column_name}_distribution.png", dpi=target_dpi)
+        plt.savefig(f"{column_name}_distribution.png", dpi=fig_dpi)
         plt.close()
-        generated_images += 1
 
 
 def narrate_story(analysis):
