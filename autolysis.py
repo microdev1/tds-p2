@@ -86,7 +86,7 @@ def generate_visualizations(df):
     """
     numeric_columns = df.select_dtypes(include=["number"]).columns
 
-    if not numeric_columns:
+    if numeric_columns.empty:
         return
 
     # Set dimensions for figures
