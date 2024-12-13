@@ -145,7 +145,7 @@ def dynamic_code(df: pd.DataFrame, analysis: dict):
         "messages": [
             {
                 "role": "system",
-                "content": "You are a data scientist with code execution capibilities for dataset analysis. Available libraries: pandas, numpy, seaborn, matplotlib, scipy. Data is stored in a DataFrame named 'df'.",
+                "content": "You are a data scientist with code execution capabilities for dataset analysis. Available libraries: pandas, numpy, seaborn, matplotlib, scipy. Data is stored in a DataFrame named 'df'.",
             },
             {
                 "role": "user",
@@ -168,6 +168,7 @@ def dynamic_code(df: pd.DataFrame, analysis: dict):
                 "strict": True,
             }
         ],
+        "max_tokens": 1500,
     }
 
     # Query llm form tool calls
@@ -310,7 +311,7 @@ def narrate_story(analysis: dict, visuals: list[str]):
     if existing_distribution_images:
         prompt += "- **Distribution Plots**: Distribution plots for numeric columns showing data spread and potential skewness.\n"
     if visuals:
-        prompt += "\nVisulizations present in current working directory:\n" + "\n".join(
+        prompt += "\nVisualizations present in current working directory:\n" + "\n".join(
             [f"- {v}" for v in visuals]
         )
 
@@ -324,6 +325,7 @@ def narrate_story(analysis: dict, visuals: list[str]):
             },
             {"role": "user", "content": prompt},
         ],
+        "max_tokens": 1500,
     }
 
     # Send request to AI Proxy
