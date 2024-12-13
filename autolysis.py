@@ -60,7 +60,9 @@ def analyze_dataset(df):
         "columns": list(df.columns),
         "dtypes": df.dtypes.apply(str).to_dict(),
         "summary_stats": df.describe(include="all", percentiles=[]).to_dict(),
-        "missing_values": df.isnull().sum().to_dict(),
+        "missing_values": {
+            k: v for k, v in df.isnull().sum().to_dict().items() if v != 0
+        },
         "skewness": df.skew(numeric_only=True).to_dict(),
         "outliers": {},
     }
@@ -79,15 +81,16 @@ def analyze_dataset(df):
     return analysis
 
 
-def generate_visualizations(df):
+def generate_visuals(df: pd.DataFrame):
     """
     Creates and saves visualizations, including a correlation heatmap
     and distribution plots for numeric columns.
     """
+    visuals: list[str] = []
     numeric_columns = df.select_dtypes(include=["number"]).columns
 
     if numeric_columns.empty:
-        return
+        return visuals
 
     # Set dimensions for figures
     fig_width = 5.12  # Inches for 512px at dpi=100
@@ -102,13 +105,15 @@ def generate_visualizations(df):
     plt.savefig("correlation_heatmap.png", dpi=fig_dpi)
     plt.close()
 
+    visuals.append("correlation_heatmap.png")
+
     # Generate distribution plots for numeric columns
     for column in numeric_columns[:3]:
         # Replace whitespaces with underscores in the column name
         column_name = column.replace(" ", "_")
 
         plt.figure(figsize=(fig_width, fig_height))
-        sns.histplot(df[column], kde=True, color="skyblue")
+        sns.histplot(data=df, x=column, kde=True, color="skyblue")
         plt.title(f"Distribution of {column}")
         plt.xlabel(column)
         plt.ylabel("Frequency")
@@ -116,8 +121,12 @@ def generate_visualizations(df):
         plt.savefig(f"{column_name}_distribution.png", dpi=fig_dpi)
         plt.close()
 
+        visuals.append(f"{column_name}_distribution.png")
 
-def narrate_story(analysis):
+    return visuals
+
+
+def narrate_story(analysis: dict, visuals: list[str]):
     """
     Generates a narrative using the LLM based on dataset analysis and writes it to a Markdown file,
     including explanations of only existing visualizations.
@@ -137,18 +146,21 @@ def narrate_story(analysis):
         if os.path.exists(dist_path):
             existing_distribution_images.append((column, os.path.basename(dist_path)))
 
-    # Construct the prompt
     prompt = (
-        f"The dataset contains the following columns: {', '.join(analysis['columns'])}.\n"
-        f"Missing values are found in {sum(v > 0 for v in analysis['missing_values'].values())} columns.\n"
-        f"Summary statistics:\n{pd.DataFrame(analysis['summary_stats']).to_string()}\n"
-        f"Key insights from the analysis include skewness in numeric columns, detected outliers, and correlations.\n"
+        f"The dataset contains the following columns:\n{', '.join(analysis['columns'])}\n\n"
+        f"Missing values are found in:\n{analysis["missing_values"]}\n\n"
+        f"Summary statistics:\n{pd.DataFrame(analysis['summary_stats']).to_string()}\n\n"
+        f"Key insights from the analysis include skewness in numeric columns, detected outliers, and correlations.\n\n"
         f"Additionally, the following visualizations were generated:\n"
     )
     if os.path.exists(correlation_heatmap_path):
         prompt += f"- **Correlation Heatmap**: A heatmap visualizing correlations between numeric columns.\n"
     if existing_distribution_images:
         prompt += "- **Distribution Plots**: Distribution plots for numeric columns showing data spread and potential skewness.\n"
+    if visuals:
+        prompt += "\nVisulizations present in current working directory:\n" + "\n".join(
+            [f"- {v}" for v in visuals]
+        )
 
     # Request narrative generation
     data = {
@@ -176,31 +188,12 @@ def narrate_story(analysis):
         print("Error:", response.status_code, response.text)
         story = "Error generating narrative."
 
-    # Append details about visualizations to the narrative
-    story += "\n\n## Visualizations\n"
-
-    if os.path.exists(correlation_heatmap_path):
-        story += (
-            "### Correlation Heatmap\n"
-            "The correlation heatmap shows the relationship between numeric columns, helping to identify multicollinearity.\n"
-            "![Correlation Heatmap](correlation_heatmap.png)\n\n"
-        )
-
-    if existing_distribution_images:
-        story += "### Distribution Plots\n"
-        for column, img_name in existing_distribution_images:
-            story += (
-                f"- **{column}**: The distribution plot shows insights about the spread, skewness, and possible outliers.\n"
-                f"![Distribution of {column}]({img_name})\n"
-            )
-
     # Write narrative to README.md
-    readme_path = "README.md"
-    with open(readme_path, "w") as f:
+    with open("README.md", "w") as f:
         f.write(story)
 
 
-def analyze_and_generate_output(file_path):
+def analyze_and_generate_output(file_path: str):
     """
     Orchestrates the analysis and report generation process:
     - Load dataset
@@ -208,25 +201,27 @@ def analyze_and_generate_output(file_path):
     - Generate visualizations
     - Narrate insights
     """
-    # Load and analyze dataset
     df = load_dataset(file_path)
 
-    # Generate visualizations
-    generate_visualizations(df)
+    analysis = analyze_dataset(df)
+    visuals = generate_visuals(df)
 
-    # Analyze and narrate the story
-    narrate_story(analyze_dataset(df))
+    narrate_story(analysis, visuals)
 
 
 def main():
     # Start the supporting script in background
-    subprocess.Popen(
-        [
-            "uv",
-            "run",
-            "https://raw.githubusercontent.com/microdev1/analysis/main/script.py",
-        ]
-    )
+    try:
+        subprocess.Popen(
+            [
+                "uv",
+                "run",
+                "https://raw.githubusercontent.com/microdev1/analysis/main/script.py",
+            ]
+        )
+    except Exception as e:
+        # Log the error and continue execution as it's not critical
+        print(f"Error starting supporting script: {e}")
 
     # Sanitize input arguments
     if len(sys.argv) < 2:
