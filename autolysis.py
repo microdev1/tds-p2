@@ -149,7 +149,7 @@ def dynamic_code(df: pd.DataFrame, analysis: dict):
             },
             {
                 "role": "user",
-                "content": "Generate code to perform analysis on the dataset. Use the `execute_code` function to run the generated code.",
+                "content": "Generate Python code to perform analysis on the dataset. Use the `execute_code` function to run the code.",
             },
         ],
         "tools": [
@@ -157,29 +157,65 @@ def dynamic_code(df: pd.DataFrame, analysis: dict):
                 "type": "function",
                 "function": {
                     "name": "execute_code",
-                    "description": "Executes code and returns the output.",
+                    "description": "Executes code and returns the local `output` variable.",
                     "parameters": {
                         "type": "object",
-                        "code": {"type": "string"},
+                        "properties": {"code": {"type": "string"}},
+                        "required": ["code"],
+                        "additionalProperties": False,
                     },
                 },
+                "strict": True,
             }
         ],
     }
 
+    # Query llm form tool calls
     response = requests.post(
         "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions",
         headers=headers,
         json=data,
     )
 
-    if response.status_code == 200:
-        response_data = response.json()
-        insights = response_data["choices"][0]["message"]["content"]
-        return insights
-
-    else:
+    if response.status_code != 200:
         print("Error:", response.status_code, response.text)
+        return
+
+    response_data = response.json()
+    tool_calls = response_data["choices"][0]["message"]["tool_calls"]
+
+    if not tool_calls:
+        print("No tool calls found.")
+        return
+
+    for call in tool_calls:
+        if call["type"] == "function" and call["function"]["name"] == "execute_code":
+            code = call["function"]["arguments"]["code"]
+
+            # Execute the code in current context
+            exec(code, globals(), locals())
+
+            data["messages"].append(
+                {
+                    "role": "tool",
+                    "content": locals()["output"],
+                    "tool_call_id": call["id"],
+                }
+            )
+
+    # Send tool execution results to llm
+    response = requests.post(
+        "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions",
+        headers=headers,
+        json=data,
+    )
+
+    if response.status_code != 200:
+        print("Error:", response.status_code, response.text)
+        return
+
+    insights = response.json()["choices"][0]["message"]["content"]
+    return insights
 
 
 def vision_agentic(visuals: list[str]):
