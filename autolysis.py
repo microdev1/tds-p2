@@ -126,6 +126,117 @@ def generate_visuals(df: pd.DataFrame):
     return visuals
 
 
+def dynamic_code(df: pd.DataFrame, analysis: dict):
+    """
+    Queries the llm for dynamic code generation
+    """
+
+    headers = {
+        "Authorization": f"Bearer {AIPROXY_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    # Request dynamic code generation
+    data = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a data scientist with code execution capibilities for dataset analysis. Available libraries: pandas, numpy, seaborn, matplotlib, scipy. Data is stored in a DataFrame named 'df'.",
+            },
+            {
+                "role": "user",
+                "content": "Generate code to perform analysis on the dataset. Use the `execute_code` function to run the generated code.",
+            },
+        ],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "execute_code",
+                    "description": "Executes code and returns the output.",
+                    "parameters": {
+                        "type": "object",
+                        "code": {"type": "string"},
+                    },
+                },
+            }
+        ],
+    }
+
+    response = requests.post(
+        "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions",
+        headers=headers,
+        json=data,
+    )
+
+    if response.status_code == 200:
+        response_data = response.json()
+        insights = response_data["choices"][0]["message"]["content"]
+        return insights
+
+    else:
+        print("Error:", response.status_code, response.text)
+
+
+def vision_agentic(visuals: list[str]):
+    """
+    Sends data visualizations to llm and returns insights
+    """
+    insights = []
+
+    headers = {
+        "Authorization": f"Bearer {AIPROXY_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    # Request interpretation of visualizations
+    data = {
+        "model": "gpt-4-vision-preview",
+        "messages": [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are a image analyst. Your goal is to describe what is in this image.",
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Analyze the visualizations and provide insights.",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": ""},
+                    },
+                ],
+            },
+        ],
+        "max_tokens": 1500,
+    }
+
+    for visual in visuals:
+        data["messages"][1]["content"][1]["image_url"]["url"] = visual
+
+        # Send request to AI Proxy
+        response = requests.post(
+            "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions",
+            headers=headers,
+            json=data,
+        )
+
+        if response.status_code == 200:
+            response_data = response.json()
+            insights.append(response_data["choices"][0]["message"]["content"])
+
+    return insights
+
+
 def narrate_story(analysis: dict, visuals: list[str]):
     """
     Generates a narrative using the LLM based on dataset analysis and writes it to a Markdown file,
